@@ -162,36 +162,38 @@ void readFile(char *diskName, char *sourceName, char *destName){
 
     bool isFound = false;
     int fileIndex;
+    int fileSize;
     for(int i=0; i<128; i++){
         if (!strcmp(sourceName, fileListArray[i].fileName)){
             isFound = true;
             fileIndex = fileListArray[i].firstBlock;
+            fileSize = fileListArray[i].fileSize;
             break;
         }
     }
     if(!isFound){
         printf("There is no file with the given name: %s\n", sourceName);
     }
-    int fileSize = fileListArray[fileIndex].fileSize;
+
     bool isFinished = false;
-    int dataIndex = fileListArray[fileIndex].firstBlock;
     while(!isFinished){
         memset(&tempData[0], 0, sizeof(tempData));
-        memcpy(&tempData, &dataContent[dataIndex], sizeof(dataContent[dataIndex]));
+        memcpy(&tempData, &dataContent[fileIndex], sizeof(dataContent[fileIndex]));
         if(fileSize <= 512){
             fwrite(tempData, fileSize * sizeof(char ), 1, readObject);
         }
         else{
-            fwrite(tempData, fileSize * sizeof(char ), 1, readObject);
             fileSize -= 512;
+            fwrite(tempData, 512 * sizeof(char ), 1, readObject);
         }
         if(fatArray[fileIndex].fatEntry == 0xFFFFFFFF){
-            isFinished = true;
+            //isFinished = true;
+            break;
         }
-        fileIndex = __bswap_constant_32(dataIndex);
+        fileIndex = __bswap_constant_32(fatArray[fileIndex].fatEntry);
     }
-    fclose(readObject);
     fclose(fileObject);
+    fclose(readObject);
 }
 
 void deleteFile(char *diskName, char *deleteFileName) {
@@ -227,7 +229,7 @@ void deleteFile(char *diskName, char *deleteFileName) {
         if(fatArray[dataIndex].fatEntry == 0xFFFFFFFF){
             break;
         }
-        changeIndex = __bswap_constant_32(dataIndex);
+        changeIndex = __bswap_constant_32(fatArray[dataIndex].fatEntry);
         fatArray[dataIndex].fatEntry = 0;
         dataIndex = changeIndex;
     }
@@ -237,8 +239,8 @@ void deleteFile(char *diskName, char *deleteFileName) {
     fileListArray[fileIndex].fileSize = 0;
     fseek(fileObject, 0, SEEK_SET);
     fwrite(fatArray, sizeof(fatArray), 1, fileObject);
-    fwrite(fileListArray, sizeof(fatArray), 1, fileObject);
-    fwrite(dataContent, sizeof(fatArray), 1, fileObject);
+    fwrite(fileListArray, sizeof(fileListArray), 1, fileObject);
+    fwrite(dataContent, sizeof(dataContent), 1, fileObject);
     fclose(fileObject);
 }
 
@@ -266,13 +268,13 @@ void printFileList(char *diskName){
     fseek(fileObject, 4096 * sizeof(struct FAT), SEEK_SET);
     fread(fileListArray, sizeof(fileListArray), 1, fileObject);
 
-    fprintf(writeObject, "Item: \t File name: \t\t First Block:\t\t Fill size (Bytes)\n");
+    fprintf(writeObject, "Item:\tFile name:\t\tFirst Block:\t\tFill size (Bytes)\n");
     for(int i=0; i<128; i++){
         if(!strcmp(fileListArray[i].fileName, "")){
-            fprintf(writeObject, "%03d\t NULL \t\t\t %04d \t\t\t %04d\n", i, fileListArray[i].firstBlock, fileListArray[i].fileSize);
+            fprintf(writeObject, "%03d\tNULL\t\t\t%d\t\t\t%d\n", i, fileListArray[i].firstBlock, fileListArray[i].fileSize);
         }
         else{
-            fprintf(writeObject, "%03d\t %s \t %04d \t \t\t %04d\n", i, fileListArray[i].fileName, fileListArray[i].firstBlock, fileListArray[i].fileSize);
+            fprintf(writeObject, "%03d\t%s\t\t%d\t\t\t%d\n", i, fileListArray[i].fileName, fileListArray[i].firstBlock, fileListArray[i].fileSize);
 
         }
     }
@@ -300,7 +302,62 @@ void printFAT(char *diskName){
 }
 
 void defragDisk(char *diskName){
+    struct FAT fatArray[4096];
+    struct FAT defragFatArray[4096];
 
+    struct fileList fileListArray[128];
+    struct fileList defragFileListArray[128];
+
+    struct data dataContent[4096];
+    struct data defragDataContent[4096];
+
+    FILE *fileObject;
+    fileObject = fopen(diskName, "r+");
+
+    fread(fatArray, sizeof(fatArray), 1, fileObject);
+    fread(fileListArray, sizeof(fileListArray), 1, fileObject);
+    fread(dataContent, sizeof(dataContent), 1, fileObject);
+
+    int defragFileIndex = 0;
+    int defragFatIndex = 1;
+    int defragStartIndex = 1;
+    int defragEndIndex;
+    bool isEndBlock = true;
+    for(int i=0; i<128; i++){
+        if(fileListArray[i].fileSize != 0 && fileListArray[i].firstBlock != 0){
+            memcpy(&defragFileListArray[defragFileIndex], &fileListArray[i], sizeof(struct fileList));
+            defragFileListArray[defragFileIndex].firstBlock = defragFatIndex;
+            defragFileIndex += 1;
+            defragEndIndex = defragFileListArray[i].firstBlock;
+            while(true){
+                memcpy(&defragDataContent[defragFatIndex], &dataContent[defragEndIndex], sizeof(struct data));
+                if(isEndBlock){
+                    defragFatArray[defragStartIndex].fatEntry = 0xFFFFFFFF;
+                    isEndBlock = false;
+                }
+                else{
+                    defragFatArray[defragStartIndex].fatEntry = __bswap_constant_32(defragFatIndex);
+                }
+                defragStartIndex = defragFatIndex;
+                if(fatArray[defragEndIndex].fatEntry == 0xFFFFFFFF){
+                    defragFatArray[defragFatIndex].fatEntry = 0xFFFFFFFF;
+                    defragFatIndex += 1;
+                    isEndBlock = true;
+                    break;
+                }
+                defragFatIndex += 1;
+                defragEndIndex = __bswap_constant_32(fatArray[defragEndIndex].fatEntry);
+            }
+        }
+    }
+    if(defragFileIndex == 0){
+        printf("There is nothing written on the disk that defregmentation can be done!");
+    }
+    fseek(fileObject, 0, SEEK_SET);
+    fwrite(defragFatArray, sizeof(defragFatArray), 1, fileObject);
+    fwrite(defragFileListArray, sizeof(defragFileListArray), 1, fileObject);
+    fwrite(defragDataContent, sizeof(defragDataContent), 1, fileObject);
+    fclose(fileObject);
 }
 
 int main(int argc, char *argv[]) {
@@ -318,13 +375,13 @@ int main(int argc, char *argv[]) {
             readFile(argv[1], argv[3], argv[4]);
             return 0;
         case 'd':
-            if(argv[2][2] == 'e') {
+            if(argv[2][3] == 'l') {
                 printf("Deleting file from the disk!\n");
                 deleteFile(argv[1], argv[3]);
                 return 0;
             }
-            else if(argv[2][2] == 'i'){
-                printf("Dist is being defragmented!\n");
+            else if(argv[2][3] == 'f'){
+                printf("Disk is being defragmented!\n");
                 defragDisk(argv[1]);
                 return 0;
             }
