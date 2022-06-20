@@ -1,6 +1,6 @@
 Item:	File name:		First Block:		Fill size (Bytes)
-000	readMe1.txt		1			2426
-001	readMe3.txt		6			2426
+000	NULL			0			0
+001	NULL			0			0
 002	NULL			0			0
 003	NULL			0			0
 004	NULL			0			0

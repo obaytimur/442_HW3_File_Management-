@@ -24,3 +24,5 @@ Remarks:
 will still work. Nonetheless, commands start with the same letter, delete & defregment and print list & print fat, needs to be strictly written to be executed. 	
   
 2. In the print list command, commands 6, I have not written the most generic printer functions. Therefore, the alligment of the columns can be changed due to the longness of the the file name. I have written the code assuming file name has charactars between 8-16. Besides this value, allignment can be distorted. However, this does not change correctness. 
+
+3. I think my defragmentation is not working completely correct. It defrags the file list correctly. However, in the fat part it just adds the end file to the end of the previous one. 
