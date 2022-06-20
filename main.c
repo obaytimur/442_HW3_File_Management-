@@ -20,6 +20,8 @@
 
 char tempData[512];
 
+// https://www.cs.utah.edu/~germain/PPS/Topics/C_Language/file_IO.html for file input and output operations
+
 struct FAT{
     unsigned fatEntry;
 };
@@ -221,13 +223,13 @@ void deleteFile(char *diskName, char *deleteFileName) {
     int changeIndex;
     memset(&fileListArray[fileIndex].fileName[0], 0, sizeof(fileListArray[fileIndex].fileName));
     while(true){
-        memset(&dataContent[0], 0, sizeof(dataContent[fileIndex].content));
-        if(fatArray[fileIndex].fatEntry == 0xFFFFFFFF){
+        memset(&dataContent[dataIndex].content[0], 0, sizeof(dataContent[dataIndex].content));
+        if(fatArray[dataIndex].fatEntry == 0xFFFFFFFF){
             break;
         }
-        changeIndex = dataIndex;
-        dataIndex = __bswap_constant_32(dataIndex);
-        fatArray[changeIndex].fatEntry = 0;
+        changeIndex = __bswap_constant_32(dataIndex);
+        fatArray[dataIndex].fatEntry = 0;
+        dataIndex = changeIndex;
     }
     fatArray[dataIndex].fatEntry = 0;
 
@@ -245,7 +247,7 @@ void list(char *diskName){
     FILE *fileObject;
     fileObject = fopen(diskName, "r");
     fseek(fileObject, 4096 * sizeof(struct FAT), SEEK_SET);
-    printf("File Name: \t File Size\t File Index\n");
+    printf("File Name: \t File Size:\t File Index:\n");
     for(int i; i<128; i++){
         fread(&fileArray, sizeof(fileArray), 1, fileObject);
         if(fileArray.fileSize != 0 && fileArray.fileName[0] != '.') {
@@ -256,23 +258,45 @@ void list(char *diskName){
 }
 
 void printFileList(char *diskName){
+    struct fileList fileListArray[128];
+    FILE *fileObject;
+    FILE *writeObject;
+    fileObject = fopen(diskName, "r");
+    writeObject = fopen("filelist.txt", "w");
+    fseek(fileObject, 4096 * sizeof(struct FAT), SEEK_SET);
+    fread(fileListArray, sizeof(fileListArray), 1, fileObject);
 
+    fprintf(writeObject, "Item: \t File name: \t\t First Block:\t\t Fill size (Bytes)\n");
+    for(int i=0; i<128; i++){
+        if(!strcmp(fileListArray[i].fileName, "")){
+            fprintf(writeObject, "%03d\t NULL \t\t\t %04d \t\t\t %04d\n", i, fileListArray[i].firstBlock, fileListArray[i].fileSize);
+        }
+        else{
+            fprintf(writeObject, "%03d\t %s \t %04d \t \t\t %04d\n", i, fileListArray[i].fileName, fileListArray[i].firstBlock, fileListArray[i].fileSize);
+
+        }
+    }
+    fclose(fileObject);
+    fclose(writeObject);
 }
 
 void printFAT(char *diskName){
     struct FAT fatArray[4096];
-    struct fileList fileListArray[128];
     FILE *fileObject;
+    FILE *writeObject;
     fileObject = fopen(diskName,"r");
+    writeObject = fopen("fat.txt","w");
 
     fread(fatArray, sizeof(fatArray), 1, fileObject);
-    fread(fileListArray, sizeof(fileListArray), 1, fileObject);
-    printf("FAT starts here: %d\n", fatArray[0].fatEntry);
-
-    printf("Address: \t Value:\n");
-    for(int i = 0; i<4096; i++){
-        printf("%d \t %d\n", i, fatArray[i].fatEntry);
+    fprintf(writeObject, "Entry \tValue \t\t\tEntry \tValue \t\t\tEntry \tValue \t\t\tEntry \tValue\n");
+    for(int i=0; i<4096; i++){
+        fprintf(writeObject,"%04d \t0 x %02X %02X %02X %02X \t", i, fatArray[i].fatEntry/(16*16*16*16*16*16), (fatArray[i].fatEntry/(16*16*16*16))%256, (fatArray[i].fatEntry/(256))%256, fatArray[i].fatEntry%256);
+        if((i+1)%4 == 0){
+            fprintf(writeObject,"\n");
+        }
     }
+    fclose(fileObject);
+    fclose(writeObject);
 }
 
 void defragDisk(char *diskName){
@@ -309,8 +333,13 @@ int main(int argc, char *argv[]) {
             list(argv[1]);
             return 0;
         case 'p':
+            if(argv[2][7] == 'i'){
+                printf("Printing files to the txt file!\n");
+                printFileList(argv[1]);
+                return 0;
+            }
             if (argv[2][7] == 'a'){
-                printf("Printing the disk!\n");
+                printf("Printing fat format to the txt file!\n");
                 printFAT(argv[1]);
                 return 0;
             }
